@@ -1,7 +1,7 @@
 <!doctype html><html lang="zh-CN"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>PetCare Pro</title></head><body><script>
-fetch('/app.html?v=20260929-1',{cache:'no-store'}).then(r=>r.text()).then(html=>{
-  html=html.replace('</style>','.login-dog{width:210px;max-width:72%;display:block;margin:0 0 20px;border-radius:24px;box-shadow:0 18px 45px #0003;background:white;padding:8px}.hero{overflow:hidden}@media(max-width:900px){.login-dog{display:none}}</style>');
-  html=html.replace('<section class="hero">','<section class="hero"><img class="login-dog" src="/login-dog.jpg" alt="PetCare 登录小狗">');
+fetch('/app.html?v=20260929-2',{cache:'no-store'}).then(r=>r.text()).then(html=>{
+  html=html.replace('</style>','.login-dog-wrap{width:210px;height:78px;overflow:hidden;margin:0 0 18px;border-radius:22px 22px 8px 8px}.login-dog{width:210px;height:auto;display:block;margin:0;padding:0;box-shadow:none;border-radius:0;background:transparent}.hero{overflow:hidden}@media(max-width:900px){.login-dog-wrap{display:none}}</style>');
+  html=html.replace('<section class="hero">','<section class="hero"><div class="login-dog-wrap"><img class="login-dog" src="/login-dog.jpg?v=2" alt="PetCare 登录小狗"></div>');
   document.open();document.write(html);document.close();
 }).catch(()=>{document.body.innerHTML='<p style="font-family:sans-serif;padding:30px">页面加载失败，请刷新重试。</p>'});
 </script></body></html>

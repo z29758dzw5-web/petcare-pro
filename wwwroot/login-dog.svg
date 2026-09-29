@@ -1,1 +1,18 @@
-<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 645 485" preserveAspectRatio="xMidYMid meet"><image width="645" height="485" href="data:image/jpeg;base64,/9j/4AAQSkZJRgABAQAAAQABAAD/2wBDAAkGBwgHBgkIBwgKCgkLDRYPDQwMDR
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 360 180" role="img" aria-label="探头小狗">
+  <g fill="none" stroke="#1f2a44" stroke-width="8" stroke-linecap="round" stroke-linejoin="round">
+    <path fill="#fff8ec" d="M93 113c-24-7-39-29-32-52 7-22 32-35 55-29 12-19 34-30 57-26 17-12 42-8 53 8 23-8 51 4 59 27 23-2 44 14 46 36 2 21-14 40-36 44-18 3-34-5-43-18-16 13-38 19-58 15-20 6-43 2-59-11-12 9-27 11-42 6z"/>
+    <path fill="#f3d6a8" d="M98 44c-24-7-45 2-52 20-7 17 3 37 24 45 11 4 20 3 29-2-9-18-9-42-1-63z"/>
+    <path fill="#f3d6a8" d="M263 42c25-8 48 3 55 22 6 18-5 39-27 46-10 4-21 2-29-3 9-21 10-43 1-65z"/>
+    <ellipse fill="#fff" cx="180" cy="86" rx="86" ry="68"/>
+    <circle fill="#1f2a44" stroke="none" cx="145" cy="80" r="10"/>
+    <circle fill="#1f2a44" stroke="none" cx="215" cy="80" r="10"/>
+    <ellipse fill="#1f2a44" stroke="none" cx="180" cy="104" rx="14" ry="11"/>
+    <path d="M180 114c0 12-9 19-20 20M180 114c0 12 9 19 20 20"/>
+    <path fill="#fff8ec" d="M119 146c4-20 20-32 38-27 13 3 22 13 24 27z"/>
+    <path fill="#fff8ec" d="M179 146c3-18 14-28 29-28 19 0 32 11 36 28z"/>
+  </g>
+  <circle cx="144" cy="78" r="3" fill="#fff"/>
+  <circle cx="214" cy="78" r="3" fill="#fff"/>
+  <ellipse cx="128" cy="102" rx="13" ry="7" fill="#f7b7b7" opacity=".65"/>
+  <ellipse cx="232" cy="102" rx="13" ry="7" fill="#f7b7b7" opacity=".65"/>
+</svg>

@@ -79,7 +79,7 @@ using (var cn = Open())
     cmd.CommandText = @"
 CREATE TABLE IF NOT EXISTS Users(Id INTEGER PRIMARY KEY AUTOINCREMENT, Name TEXT UNIQUE NOT NULL, PasswordHash TEXT NOT NULL);
 CREATE TABLE IF NOT EXISTS Pets(Id TEXT PRIMARY KEY, Name TEXT NOT NULL, Age INTEGER, Breed TEXT, Gender TEXT, Weight REAL);
-CREATE TABLE IF NOT EXISTS Customers(Id TEXT PRIMARY KEY, Name TEXT NOT NULL, Phone TEXT, Address TEXT);
+CREATE TABLE IF NOT EXISTS Customers(Id TEXT PRIMARY KEY, Name TEXT NOT NULL, Phone TEXT, Address TEXT, PetId TEXT);
 CREATE TABLE IF NOT EXISTS Washes(Id TEXT PRIMARY KEY, Name TEXT NOT NULL, Price REAL, Time TEXT, PetId TEXT);
 CREATE TABLE IF NOT EXISTS Boardings(Id TEXT PRIMARY KEY, PetId TEXT, StartDate TEXT, EndDate TEXT, PricePerDay REAL, Status TEXT);
 CREATE TABLE IF NOT EXISTS Orders(Id TEXT PRIMARY KEY, PetId TEXT, ServiceType TEXT, Price REAL, CreateTime TEXT, Status TEXT);";
@@ -87,10 +87,10 @@ CREATE TABLE IF NOT EXISTS Orders(Id TEXT PRIMARY KEY, PetId TEXT, ServiceType T
 }
 
 try { Exec("ALTER TABLE Washes ADD COLUMN PetId TEXT"); } catch { }
+try { Exec("ALTER TABLE Customers ADD COLUMN PetId TEXT"); } catch { }
 
 string Hash(string s) => Convert.ToHexString(SHA256.HashData(Encoding.UTF8.GetBytes(s)));
 string NewOrderId(string prefix) => $"{prefix}-{DateTime.UtcNow:yyyyMMddHHmmssfff}-{Guid.NewGuid().ToString("N")[..5]}";
-string PetName(string? id) => Scalar("SELECT Name FROM Pets WHERE Id=$id", ("$id", id))?.ToString() ?? id ?? "";
 
 app.MapPost("/api/auth/register", (LoginDto dto) =>
 {
@@ -142,18 +142,29 @@ app.MapPut("/api/pets/{id}", [Authorize] (string id, PetDto d) =>
 app.MapDelete("/api/pets/{id}", [Authorize] (string id) =>
     Exec("DELETE FROM Pets WHERE Id=$id", ("$id", id)) > 0 ? Results.Ok() : Results.NotFound());
 
-app.MapGet("/api/customers", [Authorize] () => Results.Ok(Query("SELECT Id as id,Name as name,Phone as phone,Address as address FROM Customers ORDER BY Name")));
+app.MapGet("/api/customers", [Authorize] () => Results.Ok(Query(@"
+SELECT c.Id as id,c.Name as name,c.Phone as phone,c.Address as address,c.PetId as petId,
+       COALESCE(p.Name,'') as petName,COALESCE(p.Breed,'') as petBreed
+FROM Customers c LEFT JOIN Pets p ON p.Id=c.PetId ORDER BY c.Name")));
 app.MapPost("/api/customers", [Authorize] (CustomerDto d) =>
 {
+    if (!string.IsNullOrWhiteSpace(d.PetId) && Scalar("SELECT 1 FROM Pets WHERE Id=$id", ("$id", d.PetId.Trim())) is null)
+        return Results.BadRequest("宠物编号不存在");
     try
     {
-        Exec("INSERT INTO Customers(Id,Name,Phone,Address) VALUES($id,$name,$phone,$address)", ("$id", d.Id), ("$name", d.Name), ("$phone", d.Phone), ("$address", d.Address));
+        Exec("INSERT INTO Customers(Id,Name,Phone,Address,PetId) VALUES($id,$name,$phone,$address,$petId)",
+            ("$id", d.Id), ("$name", d.Name), ("$phone", d.Phone), ("$address", d.Address), ("$petId", d.PetId?.Trim()));
         return Results.Ok();
     }
     catch { return Results.BadRequest("客户编号已存在"); }
 });
 app.MapPut("/api/customers/{id}", [Authorize] (string id, CustomerDto d) =>
-    Exec("UPDATE Customers SET Name=$name,Phone=$phone,Address=$address WHERE Id=$id", ("$id", id), ("$name", d.Name), ("$phone", d.Phone), ("$address", d.Address)) > 0 ? Results.Ok() : Results.NotFound());
+{
+    if (!string.IsNullOrWhiteSpace(d.PetId) && Scalar("SELECT 1 FROM Pets WHERE Id=$id", ("$id", d.PetId.Trim())) is null)
+        return Results.BadRequest("宠物编号不存在");
+    return Exec("UPDATE Customers SET Name=$name,Phone=$phone,Address=$address,PetId=$petId WHERE Id=$id",
+        ("$id", id), ("$name", d.Name), ("$phone", d.Phone), ("$address", d.Address), ("$petId", d.PetId?.Trim())) > 0 ? Results.Ok() : Results.NotFound();
+});
 app.MapDelete("/api/customers/{id}", [Authorize] (string id) => Exec("DELETE FROM Customers WHERE Id=$id", ("$id", id)) > 0 ? Results.Ok() : Results.NotFound());
 
 app.MapGet("/api/washes", [Authorize] () => Results.Ok(Query(@"
@@ -237,7 +248,7 @@ app.Run();
 
 record LoginDto(string? Name, string? Password);
 record PetDto(string Id, string Name, int? Age, string? Breed, string? Gender, double? Weight);
-record CustomerDto(string Id, string Name, string? Phone, string? Address);
+record CustomerDto(string Id, string Name, string? Phone, string? Address, string? PetId);
 record WashDto(string Id, string? PetId, string Name, double Price, string? Time);
 record BoardingDto(string Id, string? PetId, string StartDate, string EndDate, double PricePerDay, string? Status);
 record OrderDto(string Id, string? PetId, string? ServiceType, double Price, string? CreateTime, string? Status);

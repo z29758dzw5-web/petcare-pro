@@ -10,6 +10,7 @@
 @media(max-width:900px){.login{grid-template-columns:1fr}.hero{display:none}.shell{grid-template-columns:1fr}.side{position:fixed;left:-260px;z-index:15;width:250px;transition:.2s}.side.open{left:0}.hamb{display:inline-flex}.stats{grid-template-columns:1fr 1fr}.content{padding:16px}.topbar{padding:0 16px}.toolbar{align-items:flex-start;flex-direction:column}.toolbar .left{width:100%}.search{width:100%}.panel{overflow:auto}}
 @media(max-width:560px){.stats,.grid2{grid-template-columns:1fr}.login-side{padding:14px}.card-login{padding:24px}th,td{white-space:nowrap}}
 </style>
+<link rel="stylesheet" href="/commercial.css?v=20261005-1">
 </head>
 <body>
 <div id="login" class="login"><section class="hero"><span class="kicker">PETCARE BUSINESS CONSOLE</span><h1>宠物门店运营<br>一站式管理</h1><p>宠物档案、客户资料、洗护、寄养与服务订单自动联动。</p></section><section class="login-side"><div class="card-login"><div class="brand"><div class="brandmark">🐾</div>PetCare Pro</div><h2>欢迎回来</h2><p style="color:#64748b">登录后进入门店业务控制台</p><div class="field"><label>用户名</label><input id="username" placeholder="例如：store_admin"></div><div class="field"><label>密码</label><input id="password" type="password" placeholder="请输入密码"></div><div class="login-actions"><button class="btn primary" onclick="doLogin()">登录</button><button class="btn secondary" onclick="registerUser()">注册账号</button><button class="btn secondary" onclick="location.href='/forgot-password.html'">忘记密码</button><button class="btn secondary" onclick="location.href='/sms-login.html'">短信登录</button></div><div id="loginMsg" class="msg"></div></div></section></div>
@@ -54,5 +55,6 @@ async function removeRow(kind,id){if(!confirm('确定删除这条记录吗？'))
 function closeModal(){modal.classList.add('hidden')}
 boot();
 </script>
+<script src="/commercial.js?v=20261005-1"></script>
 </body>
 </html>

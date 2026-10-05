@@ -5,6 +5,7 @@ using Microsoft.Data.Sqlite;
 using System.Security.Claims;
 using System.Security.Cryptography;
 using System.Text;
+using System.Collections.Concurrent;
 
 var builder = WebApplication.CreateBuilder(args);
 
@@ -26,7 +27,7 @@ app.UseStaticFiles();
 app.UseAuthentication();
 app.UseAuthorization();
 
-var dataDir = Environment.GetEnvironmentVariable("DATA_DIR") ?? "/app/data";
+var dataDir = Environment.GetEnvironmentVariable("DATA_DIR") ?? Path.Combine(app.Environment.ContentRootPath, "data");
 Directory.CreateDirectory(dataDir);
 var dbPath = Path.Combine(dataDir, "petcare.db");
 string Cs() => $"Data Source={dbPath}";
@@ -77,7 +78,7 @@ using (var cn = Open())
 {
     using var cmd = cn.CreateCommand();
     cmd.CommandText = @"
-CREATE TABLE IF NOT EXISTS Users(Id INTEGER PRIMARY KEY AUTOINCREMENT, Name TEXT UNIQUE NOT NULL, PasswordHash TEXT NOT NULL);
+CREATE TABLE IF NOT EXISTS Users(Id INTEGER PRIMARY KEY AUTOINCREMENT, Name TEXT UNIQUE NOT NULL, PasswordHash TEXT NOT NULL, Phone TEXT);
 CREATE TABLE IF NOT EXISTS Pets(Id TEXT PRIMARY KEY, Name TEXT NOT NULL, Age INTEGER, Breed TEXT, Gender TEXT, Weight REAL);
 CREATE TABLE IF NOT EXISTS Customers(Id TEXT PRIMARY KEY, Name TEXT NOT NULL, Phone TEXT, Address TEXT, PetId TEXT);
 CREATE TABLE IF NOT EXISTS Washes(Id TEXT PRIMARY KEY, Name TEXT NOT NULL, Price REAL, Time TEXT, PetId TEXT);
@@ -88,17 +89,24 @@ CREATE TABLE IF NOT EXISTS Orders(Id TEXT PRIMARY KEY, PetId TEXT, ServiceType T
 
 try { Exec("ALTER TABLE Washes ADD COLUMN PetId TEXT"); } catch { }
 try { Exec("ALTER TABLE Customers ADD COLUMN PetId TEXT"); } catch { }
+try { Exec("ALTER TABLE Users ADD COLUMN Phone TEXT"); } catch { }
 
 string Hash(string s) => Convert.ToHexString(SHA256.HashData(Encoding.UTF8.GetBytes(s)));
 string NewOrderId(string prefix) => $"{prefix}-{DateTime.UtcNow:yyyyMMddHHmmssfff}-{Guid.NewGuid().ToString("N")[..5]}";
+var smsCodes = new ConcurrentDictionary<string, SmsCodeInfo>();
 
 app.MapPost("/api/auth/register", (LoginDto dto) =>
 {
     if (string.IsNullOrWhiteSpace(dto.Name) || string.IsNullOrWhiteSpace(dto.Password) || dto.Password.Length < 4)
         return Results.BadRequest("用户名不能为空，密码至少4位");
+    if (string.IsNullOrWhiteSpace(dto.Phone))
+        return Results.BadRequest("请输入手机号");
+    if (Scalar("SELECT 1 FROM Users WHERE Phone=$phone", ("$phone", dto.Phone.Trim())) is not null)
+        return Results.BadRequest("手机号已经注册");
     try
     {
-        Exec("INSERT INTO Users(Name,PasswordHash) VALUES($n,$p)", ("$n", dto.Name.Trim()), ("$p", Hash(dto.Password)));
+        Exec("INSERT INTO Users(Name,PasswordHash,Phone) VALUES($n,$p,$phone)",
+            ("$n", dto.Name.Trim()), ("$p", Hash(dto.Password)), ("$phone", dto.Phone.Trim()));
         return Results.Ok();
     }
     catch { return Results.BadRequest("用户名已存在"); }
@@ -115,6 +123,73 @@ app.MapPost("/api/auth/login", async (HttpContext ctx, LoginDto dto) =>
         CookieAuthenticationDefaults.AuthenticationScheme);
     await ctx.SignInAsync(CookieAuthenticationDefaults.AuthenticationScheme, new ClaimsPrincipal(identity));
     return Results.Ok(new { name = dto.Name });
+});
+
+app.MapPost("/api/auth/send-code", (SmsSendDto dto) =>
+{
+    if (string.IsNullOrWhiteSpace(dto.Phone)) return Results.BadRequest("请输入手机号");
+    var phone = dto.Phone.Trim();
+    if (Scalar("SELECT 1 FROM Users WHERE Phone=$phone", ("$phone", phone)) is null)
+        return Results.BadRequest("这个手机号还没有注册");
+
+    var code = Random.Shared.Next(100000, 999999).ToString();
+    smsCodes[phone] = new SmsCodeInfo(code, DateTime.UtcNow.AddMinutes(5));
+    Console.WriteLine($"短信验证码 {phone}: {code}");
+
+    // DEMO：直接返回验证码，方便任何设备测试；接真实短信平台时删除 demoCode。
+    return Results.Ok(new { message = "验证码已生成（演示模式）", demoCode = code });
+});
+
+app.MapPost("/api/auth/sms-login", async (HttpContext ctx, SmsLoginDto dto) =>
+{
+    if (string.IsNullOrWhiteSpace(dto.Phone) || string.IsNullOrWhiteSpace(dto.Code))
+        return Results.BadRequest("手机号和验证码不能为空");
+    var phone = dto.Phone.Trim();
+    if (!smsCodes.TryGetValue(phone, out var info))
+        return Results.BadRequest("请先获取验证码");
+    if (DateTime.UtcNow > info.ExpireTime)
+    {
+        smsCodes.TryRemove(phone, out _);
+        return Results.BadRequest("验证码已过期");
+    }
+    if (info.Code != dto.Code.Trim())
+        return Results.BadRequest("验证码错误");
+
+    var username = Scalar("SELECT Name FROM Users WHERE Phone=$phone", ("$phone", phone))?.ToString();
+    if (string.IsNullOrWhiteSpace(username)) return Results.BadRequest("手机号没有绑定用户");
+
+    var identity = new ClaimsIdentity(
+        new[] { new Claim(ClaimTypes.Name, username) },
+        CookieAuthenticationDefaults.AuthenticationScheme);
+    await ctx.SignInAsync(CookieAuthenticationDefaults.AuthenticationScheme, new ClaimsPrincipal(identity));
+    smsCodes.TryRemove(phone, out _);
+    return Results.Ok(new { name = username });
+});
+
+app.MapPost("/api/auth/reset-password", (ResetPasswordDto dto) =>
+{
+    if (string.IsNullOrWhiteSpace(dto.Phone)) return Results.BadRequest("请输入手机号");
+    if (string.IsNullOrWhiteSpace(dto.Code)) return Results.BadRequest("请输入验证码");
+    if (string.IsNullOrWhiteSpace(dto.NewPassword) || dto.NewPassword.Length < 4)
+        return Results.BadRequest("新密码至少4位");
+
+    var phone = dto.Phone.Trim();
+    if (!smsCodes.TryGetValue(phone, out var info))
+        return Results.BadRequest("请先获取验证码");
+    if (DateTime.UtcNow > info.ExpireTime)
+    {
+        smsCodes.TryRemove(phone, out _);
+        return Results.BadRequest("验证码已过期");
+    }
+    if (info.Code != dto.Code.Trim())
+        return Results.BadRequest("验证码错误");
+
+    var changed = Exec("UPDATE Users SET PasswordHash=$p WHERE Phone=$phone",
+        ("$p", Hash(dto.NewPassword)), ("$phone", phone));
+    if (changed == 0) return Results.BadRequest("手机号没有绑定用户");
+
+    smsCodes.TryRemove(phone, out _);
+    return Results.Ok(new { message = "密码修改成功" });
 });
 
 app.MapPost("/api/auth/logout", [Authorize] async (HttpContext ctx) =>
@@ -246,7 +321,11 @@ var port = Environment.GetEnvironmentVariable("PORT") ?? "8080";
 app.Urls.Add($"http://0.0.0.0:{port}");
 app.Run();
 
-record LoginDto(string? Name, string? Password);
+record LoginDto(string? Name, string? Password, string? Phone);
+record SmsSendDto(string? Phone);
+record SmsLoginDto(string? Phone, string? Code);
+record ResetPasswordDto(string? Phone, string? Code, string? NewPassword);
+record SmsCodeInfo(string Code, DateTime ExpireTime);
 record PetDto(string Id, string Name, int? Age, string? Breed, string? Gender, double? Weight);
 record CustomerDto(string Id, string Name, string? Phone, string? Address, string? PetId);
 record WashDto(string Id, string? PetId, string Name, double Price, string? Time);
